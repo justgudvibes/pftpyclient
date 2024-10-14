@@ -515,7 +515,7 @@ class PostFiatTaskManager:
             return transactions
     
 
-    def get_memo_detail_df_for_account(self,account_address,transaction_limit=5000):
+  def get_memo_detail_df_for_account(self,account_address,transaction_limit=5000):
         """ This function gets all the memo details for a given account """
         
         full_transaction_history = self.get_account_transactions(account_address=account_address, 
@@ -524,19 +524,19 @@ class PostFiatTaskManager:
 
         
         validated_tx = pd.DataFrame(full_transaction_history)
-        validated_tx['has_memos']=validated_tx['tx'].apply(lambda x: 'Memos' in x.keys())
+        validated_tx['has_memos']=validated_tx['tx_json'].apply(lambda x: 'Memos' in x.keys())
         live_memo_tx = validated_tx[validated_tx['has_memos']== True].copy()
-        live_memo_tx['main_memo_data']=live_memo_tx['tx'].apply(lambda x: x['Memos'][0]['Memo'])
+        live_memo_tx['main_memo_data']=live_memo_tx['tx_json'].apply(lambda x: x['Memos'][0]['Memo'])
         live_memo_tx['converted_memos']=live_memo_tx['main_memo_data'].apply(lambda x: 
                                                                              self.convert_memo_dict(x))
-        live_memo_tx['hash']=live_memo_tx['tx'].apply(lambda x: x['hash'])
-        live_memo_tx['account']= live_memo_tx['tx'].apply(lambda x: x['Account'])
-        live_memo_tx['destination']=live_memo_tx['tx'].apply(lambda x: x['Destination'])
+        
+        live_memo_tx['account']= live_memo_tx['tx_json'].apply(lambda x: x['Account'])
+        live_memo_tx['destination']=live_memo_tx['tx_json'].apply(lambda x: x['Destination'])
         
         live_memo_tx['message_type']=np.where(live_memo_tx['destination']==account_address, 'INCOMING','OUTGOING')
         live_memo_tx['node_account']= live_memo_tx[['destination','account']].sum(1).apply(lambda x: 
                                                          str(x).replace(account_address,''))
-        live_memo_tx['datetime']= live_memo_tx['tx'].apply(lambda x: self.convert_ripple_timestamp_to_datetime(x['date']))
+        live_memo_tx['datetime']= live_memo_tx['tx_json'].apply(lambda x: self.convert_ripple_timestamp_to_datetime(x['date']))
         return live_memo_tx
     
 
@@ -551,7 +551,7 @@ class PostFiatTaskManager:
         Note that the context docs are linked to node addresses so the default node address is used
         
         """
-        all_account_info['is_post_fiat']=all_account_info['tx'].apply(lambda x: self.check_if_tx_pft(x))
+        all_account_info['is_post_fiat']=all_account_info['tx_json'].apply(lambda x: self.check_if_tx_pft(x))
         redux_tx_list = all_account_info[(all_account_info['is_post_fiat']== True)&
                                         (all_account_info['destination']==self.default_node)].copy()
         outgoing_messages_only= redux_tx_list[redux_tx_list['message_type']=='OUTGOING'].copy()
@@ -679,14 +679,14 @@ class PostFiatTaskManager:
         #all_account_info['datetime']= all_account_info['tx'].apply(lambda x: self.convert_ripple_timestamp_to_datetime(x['date']))
         simplified_task_frame = all_account_info[all_account_info['converted_memos'].apply(lambda x: 
                                                                 self.determine_if_map_is_task_id(x))].copy()
-        simplified_task_frame = simplified_task_frame[simplified_task_frame['tx'].apply(lambda 
+        simplified_task_frame = simplified_task_frame[simplified_task_frame['tx_json'].apply(lambda 
                                                                                         x: x['Amount']).apply(lambda x: 
                                                                                                                     "'currency': 'PFT'" in str(x))].copy()
         def add_field_to_map(xmap, field, field_value):
             xmap[field] = field_value
             return xmap
         
-        simplified_task_frame['pft_abs']= simplified_task_frame['tx'].apply(lambda x: x['Amount']['value']).astype(float)
+        simplified_task_frame['pft_abs']= simplified_task_frame['tx_json'].apply(lambda x: x['Amount']['value']).astype(float)
         simplified_task_frame['directional_pft']=simplified_task_frame['message_type'].map({'INCOMING':1,
             'OUTGOING':-1}) * simplified_task_frame['pft_abs']
         
@@ -983,8 +983,8 @@ class PostFiatTaskManager:
         # Apply the lambda function to prepend 'REWARD RESPONSE __' to each REWARD entry
         reward_df['REWARD'] = reward_df['REWARD'].astype(object).apply(lambda x: x.replace('REWARD RESPONSE __ ',''))
         reward_df.columns=['proposal','reward']
-        pft_only=all_account_info[all_account_info['tx'].apply(lambda x: "PFT" in str(x['Amount']))].copy()
-        pft_only['pft_value']=pft_only['tx'].apply(lambda x: x['Amount']['value']).astype(float)*pft_only['message_type'].map({'INCOMING':1,'OUTGOING':-1})
+        pft_only=all_account_info[all_account_info['tx_json'].apply(lambda x: "PFT" in str(x['Amount']))].copy()
+        pft_only['pft_value']=pft_only['tx_json'].apply(lambda x: x['Amount']['value']).astype(float)*pft_only['message_type'].map({'INCOMING':1,'OUTGOING':-1})
         pft_only['task_id']=pft_only['converted_memos'].apply(lambda x: x['task_id'])
         task_id_hash = all_tasks[all_tasks['task_type']=='REWARD'].groupby('task_id').last()[['hash']]
         pft_rewards_only = pft_only[pft_only['converted_memos'].apply(lambda x: 'REWARD RESPONSE __' in 
